@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.30)
+cmake_minimum_required(VERSION 3.20)
 project(raylib_starter)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -9,16 +9,18 @@ include(FetchContent)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Dependencies
-set(RAYLIB_VERSION 5.5)
+#set(RAYLIB_VERSION 5.5)
+#
+#FetchContent_Declare(
+#        raylib
+#        DOWNLOAD_EXTRACT_TIMESTAMP OFF
+#        URL https://github.com/raysan5/raylib/archive/refs/tags/${RAYLIB_VERSION}.tar.gz
+#        FIND_PACKAGE_ARGS
+#)
+#
+#FetchContent_MakeAvailable(raylib)
 
-FetchContent_Declare(
-        raylib
-        DOWNLOAD_EXTRACT_TIMESTAMP OFF
-        URL https://github.com/raysan5/raylib/archive/refs/tags/${RAYLIB_VERSION}.tar.gz
-        FIND_PACKAGE_ARGS
-)
-
-FetchContent_MakeAvailable(raylib)
+add_subdirectory( vendor/raylib-master)
 
 add_executable(${PROJECT_NAME})
 add_subdirectory(src)
