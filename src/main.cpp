@@ -30,7 +30,7 @@ constexpr float viewportDistance = 1.0f;
 constexpr auto fScreenWidth = static_cast<float>(screenWidth);
 constexpr auto fScreenHeight = static_cast<float>(screenHeight);
 constexpr auto backgroundColor = Vector3(30, 30, 30);
-const auto ambientLight = Vector3(0.6, 0.5, 0.6);
+constexpr auto ambientLight = Vector3(0.35, 0.35, 0.35);
 
 const std::vector<Sphere> spheres = {
     Sphere(
