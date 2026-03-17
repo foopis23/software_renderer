@@ -1,5 +1,6 @@
 #include <limits>
 #include <optional>
+#include <thread>
 #include <vector>
 #include "raylib.h"
 #include "raymath.h"
@@ -138,11 +139,50 @@ Vector3 TraceRay(const Vector3 O, const Vector3 D, const float t_min, const floa
     return Vector3(backgroundColor.x, backgroundColor.y, backgroundColor.z);
 }
 
+Color ToColor(const Vector3 color) {
+    return Color(
+        static_cast<unsigned char>(Clamp(color.x, 0.0f, 255.0f)),
+        static_cast<unsigned char>(Clamp(color.y, 0.0f, 255.0f)),
+        static_cast<unsigned char>(Clamp(color.z, 0.0f, 255.0f)),
+        255
+    );
+}
+
+void RenderFrameParallel(std::vector<Color>& framebuffer) {
+    const unsigned int hw_threads = std::thread::hardware_concurrency();
+    const unsigned int thread_count = hw_threads == 0 ? 4 : hw_threads;
+    const int rows_per_thread = screenHeight / static_cast<int>(thread_count);
+    std::vector<std::thread> workers;
+    workers.reserve(thread_count);
+
+    for (unsigned int i = 0; i < thread_count; ++i) {
+        const int y_start = static_cast<int>(i) * rows_per_thread;
+        const int y_end = (i == thread_count - 1) ? screenHeight : y_start + rows_per_thread;
+
+        workers.emplace_back([&framebuffer, y_start, y_end]() {
+            for (int py = y_start; py < y_end; ++py) {
+                const int y_canvas = py - screenHeight / 2;
+                for (int px = 0; px < screenWidth; ++px) {
+                    const int x_canvas = px - screenWidth / 2;
+                    const Vector3 direction = CanvasToViewPortDirection(x_canvas, y_canvas);
+                    const Vector3 color = TraceRay(O, direction, 1, std::numeric_limits<float>::max());
+                    framebuffer[py * screenWidth + px] = ToColor(color);
+                }
+            }
+        });
+    }
+
+    for (auto& worker : workers) {
+        worker.join();
+    }
+}
+
 int main()
 {
     InitWindow(screenWidth, screenHeight, "Software Renderer");
 
-    SetTargetFPS(60);
+    SetTargetFPS(999);
+    std::vector<Color> framebuffer(static_cast<size_t>(screenWidth) * static_cast<size_t>(screenHeight));
     const std::vector<Vector3> og_pos = {};
 
     // Main game loop
@@ -154,15 +194,14 @@ int main()
             spheres[i].center = Vector3(cosf(angle) * (static_cast<float>(i) * 1.65f), sinf(angle) * (static_cast<float>(i) * 1.75f), 10);
         }
 
+        RenderFrameParallel(framebuffer);
+
         BeginDrawing();
         ClearBackground(Color(backgroundColor.x, backgroundColor.y, backgroundColor.z, 255));
-        // draw each pixel
-        for (int x = -screenWidth / 2; x <= screenWidth / 2; x++) {
-            for (int y = -screenWidth / 2; y <= screenWidth / 2; y++) {
-                const auto D = CanvasToViewPortDirection(x, y);
-                const auto color = TraceRay(O, D, 1, std::numeric_limits<float>::max());
-                const auto screen_pos = CanvasToScreen(Vector2(x, y));
-                DrawPixel(screen_pos.x, screen_pos.y, Color(color.x, color.y, color.z, 255));
+        for (int y = 0; y < screenHeight; ++y) {
+            for (int x = 0; x < screenWidth; ++x) {
+                const Color color = framebuffer[y * screenWidth + x];
+                DrawPixel(x, y, color);
             }
         }
         DrawFPS(10, 10);
