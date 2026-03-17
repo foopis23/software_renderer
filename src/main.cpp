@@ -1,4 +1,5 @@
 #include <limits>
+#include <cmath>
 #include <optional>
 #include <thread>
 #include <vector>
@@ -21,15 +22,15 @@ public:
 };
 
 constexpr auto O = Vector3(0.0f, 0.0f, 0.0f);
-constexpr int screenWidth = 400;
-constexpr int screenHeight = 400;
+constexpr int screenWidth = 600;
+constexpr int screenHeight = 600;
 constexpr float viewportWidth = 1.0f;
 constexpr float viewportHeight = 1.0f;
 constexpr float viewportDistance = 1.0f;
 constexpr auto fScreenWidth = static_cast<float>(screenWidth);
 constexpr auto fScreenHeight = static_cast<float>(screenHeight);
 constexpr auto backgroundColor = Vector3(30, 30, 30);
-const auto directionLight = Vector3Normalize(Vector3(1.0, -0.5, -1.0));
+const auto ambientLight = Vector3(0.6, 0.5, 0.6);
 
 const std::vector<Sphere> spheres = {
     Sphere(
@@ -99,12 +100,24 @@ Vector2 IntersectRaySphere(const Vector3 O, const Vector3 D, const Sphere sphere
     return Vector2(t1, t2);
 }
 
-Vector3 diffuse_light(const Vector3 O, const Vector3 D, const float t, const std::optional<Sphere> &sphere) {
+Vector3 DiffuseLight(const Vector3 O, const Vector3 D, const float t, const std::optional<Sphere> &sphere) {
     const Vector3 intersection_point = Vector3Add(O, Vector3Scale(D, t));
     const Vector3 normal = Vector3Normalize(Vector3Subtract(intersection_point, sphere->center));
     const Vector3 dirToSun = Vector3Normalize(Vector3Subtract(spheres[0].center, intersection_point));
-    const float light_intensity = Vector3DotProduct(normal, dirToSun);
-    return Vector3Lerp(Vector3(0.35, 0.35, 0.35), Vector3(1.0, 1.0, 1.0), light_intensity);
+    const float light_intensity = Clamp(Vector3DotProduct(normal, dirToSun), 0.0f, 1.0f);
+    return Vector3(light_intensity, light_intensity, light_intensity);
+}
+
+float FresnelSchlick(const float cos_theta, const float F0) {
+    const float one_minus_cos = 1.0f - Clamp(cos_theta, 0.0f, 1.0f);
+    return F0 + (1.0f - F0) * std::pow(one_minus_cos, 5.0f);
+}
+
+Vector3 ApplyFresnel(const Vector3 base_color, const Vector3 normal, const Vector3 view_dir) {
+    const float cos_theta = Vector3DotProduct(normal, view_dir);
+    const float fresnel = FresnelSchlick(cos_theta, 0.08f);
+    const float fresnel_strength = 0.75f;
+    return Vector3Lerp(base_color, Vector3(255.0f, 255.0f, 255.0f), fresnel * fresnel_strength);
 }
 
 Vector3 TraceRay(const Vector3 O, const Vector3 D, const float t_min, const float t_max) {
@@ -128,12 +141,18 @@ Vector3 TraceRay(const Vector3 O, const Vector3 D, const float t_min, const floa
     }
 
     if (closest_sphere.has_value()) {
-        if (!closest_sphere->lit) {
-            return closest_sphere->color;
+        const Vector3 hit_point = Vector3Add(O, Vector3Scale(D, closest_t));
+        const Vector3 normal = Vector3Normalize(Vector3Subtract(hit_point, closest_sphere->center));
+        const Vector3 view_dir = Vector3Normalize(Vector3Negate(D));
+
+        Vector3 base_color = closest_sphere->color;
+        if (closest_sphere->lit) {
+            const Vector3 diffuse = DiffuseLight(O, D, closest_t, closest_sphere);
+            const Vector3 light = Vector3Clamp(Vector3Add(ambientLight, diffuse), Vector3(0, 0, 0), Vector3(1, 1, 1));
+            base_color = Vector3Multiply(base_color, light);
         }
 
-        const Vector3 light = diffuse_light(O, D, closest_t, closest_sphere);
-        return Vector3Multiply(closest_sphere->color, light);
+        return ApplyFresnel(base_color, normal, view_dir);
     }
 
     return Vector3(backgroundColor.x, backgroundColor.y, backgroundColor.z);
